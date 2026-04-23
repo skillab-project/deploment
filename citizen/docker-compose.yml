@@ -1,0 +1,223 @@
+services:
+  # -- UI --
+  ui:
+    image: skillabproject/ui:0.1.145
+    container_name: ui
+    environment:
+      - REACT_APP_API_URL_TRACKER_USERNAME=xxx
+      - REACT_APP_API_URL_TRACKER_PASSWORD=xxx
+      - REACT_APP_API_URL_TRACKER=https://skillab-tracker.csd.auth.gr
+      - REACT_APP_INSTALLATION=citizen
+      - REACT_APP_API_URL_USER_MANAGEMENT=http://localhost:8081
+      - REACT_APP_API_URL_KU_PUBLIC=http://localhost:5000
+      - REACT_APP_API_URL_SKILLS_DIVERSITY=http://localhost:8870
+      - REACT_APP_API_URL_SKILL_DEMAND_MATRIX=http://localhost:8872
+      - REACT_APP_API_URL_CURRICULUM_SKILLS=http://localhost:5002
+      - REACT_APP_API_URL_SKILL_AGEING=http://localhost:8002
+      - REACT_APP_API_URL_GIANT_COMPONENT_NETWORKS=http://localhost:8003
+      - REACT_APP_API_URL_OCCUPATIONAL_DEMAND_FORECASTER=http://localhost:8877
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+
+
+  # -- User management --
+  user-management-backend:
+    image: skillabproject/user-management:0.1.88
+    container_name: user-management-backend
+    depends_on:
+      - user-management-db
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://user-management-db:5432/test_db
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - SPRING_JPA_HIBERNATE_DDL-AUTO=update
+      - SPRING_MAIL_USERNAME=aaaa@gmail.com #email for sending notifications, to be updated
+      - SPRING_MAIL_PASSWORD=aaaaaaaaaaaaaaaa #app password for the email, to be updated
+      - APP_INSTALLATION=citizen
+      - APP_ADMIN_EMAIL=aaaa@gmail.com #email for the admin user, to be updated
+      - APP_ADMIN_PASSWORD=aaaaaaaa #password for the admin user, to be updated
+      - APP_JWT_SECRET=secretkey #secret key for JWT, to be updated
+      - FRONTEND_URL=http://localhost:3000
+      - TRACKER_API_URL=https://skillab-tracker.csd.auth.gr
+      - TRACKER_API_USERNAME=
+      - TRACKER_API_PASSWORD=
+    restart: unless-stopped
+    ports:
+      - '8081:8080'
+
+  user-management-db:
+    image: postgres:14.7
+    container_name: user-management-db
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: test_db
+    restart: unless-stopped
+    volumes:
+       - user_management_postgresql_data:/var/lib/postgresql/data
+  
+
+  # -- KU Detection --
+  ku-detection-backend:
+    image: nikosnikolaidis/ku-detection-backend
+    container_name: ku-detection-backend
+    depends_on:
+      - ku-detection-db
+    environment:
+      - DB_HOST=ku-detection-db
+      - DB_PORT=5432
+      - DB_NAME=test
+      - DB_USER=root
+      - DB_PASSWORD=root
+    restart: unless-stopped
+    ports:
+      - '5000:5000'
+
+  ku-detection-db:
+    image: postgres:16.2
+    container_name: ku-detection-db
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: test
+    volumes:
+      - ku_detection_postgresql_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+
+  # -- diversity-analysis --
+  diversity-analysis:
+    image: skillabproject/skills-diversity:0.1.41
+    container_name: diversity-analysis
+    environment:
+      - URL=https://skillab-tracker.csd.auth.gr/api
+      - USERNAME=
+      - PASSWORD=
+    volumes:
+      - diversity_data:/app/data
+    restart: unless-stopped
+    ports:
+      - '8870:8870'
+  
+
+  # -- hierarchical-cumulative-voting --
+  hierarchical-cumulative-voting:
+    image: skillabproject/hierarchical-cumulative-voting:0.1.44
+    container_name: hierarchical-cumulative-voting
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TRACKER_API=https://skillab-tracker.csd.auth.gr/api
+      - USERNAME=
+      - PASSWORD=
+    volumes:
+      - app_hcv:/app/Completed_Analyses
+    restart: unless-stopped
+    ports:
+      - "8872:8000"
+  
+
+  # -- curriculum-skills --
+  curriculum-skills:
+    depends_on:
+      mysql-curriculum-skill:
+        condition: service_healthy
+    container_name: curriculum-skills
+    image: skillabproject/curriculum-skills:?????   # to be updated with the correct version
+    ports:
+      - "5002:8000"
+    volumes:
+      - curriculum-curriculum:/app/curriculum
+      - curriculum-crawler_json:/app/crawler_json
+      - skill-gap-longterm:/app/longterm_storage
+    environment:
+      - PYTHONUNBUFFERED=1
+      - UVICORN_WORKERS=1
+      - DB_HOST=mysql-curriculum-skill
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=root
+      - DB_NAME=skillcrawl
+      - LONGTERM_STORAGE_DIR=/app/longterm_storage
+    command: >
+      uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/curriculum-skills/health >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+  
+  mysql-curriculum-skill:
+    image: skillabproject/mysql-curriculum-skill:20260423
+    container_name: mysql-curriculum-skill
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: skillcrawl
+    ports:
+      - "5003:3306"
+    volumes:
+      - curriculum-skills_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-proot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
+  # -- skill-ageing --
+  skill-ageing:
+    image: skillabproject/skill-ageing:0.1.39
+    container_name: skill-ageing
+    environment:
+      - TRACKER_API=https://skillab-tracker.csd.auth.gr/api
+      - TRACKER_USERNAME=
+      - TRACKER_PASSWORD=
+      - KU_API_URL=http://ku-detection-backend:5000
+    volumes:
+      - skill-ageing_analyses:/app/Completed_Analyses
+    restart: unless-stopped
+    ports:
+      - '8002:8000'
+
+
+  # -- giant-component-networks --
+  giant-component-networks:
+    image: skillabproject/giant-component-networks:0.1.23
+    container_name: giant-component-networks
+    environment:
+      - TRACKER_API=https://skillab-tracker.csd.auth.gr/api
+      - TRACKER_USERNAME=
+      - TRACKER_PASSWORD=
+      - KU_API_URL=http://ku-detection-backend:5000
+    volumes:
+      - giant-component-networks_analyses:/app/Completed_Analyses
+    restart: unless-stopped
+    ports:
+      - '8003:8000'
+  
+
+  # -- occupational-demand-forecaster --
+  occupational-demand-forecaster:
+    container_name: occupational-demand-forecaster
+    image: skillabproject/occupational-demand-forecaster:0.1.6
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8877:8877"
+    restart: unless-stopped
+
+
+volumes:
+  user_management_postgresql_data:
+  employee_management_postgresql_data:
+  ku_detection_postgresql_data:
+  diversity_data:
+  app_hcv:
+  curriculum-skills_mysql:
+  curriculum-curriculum:
+  curriculum-crawler_json:
+  skill-gap-longterm:
+  skill-ageing_analyses:
+  giant-component-networks_analyses:

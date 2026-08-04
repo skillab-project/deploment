@@ -19,3 +19,15 @@ The Citizen flavor is designed for individual career pathing and upskilling.
 - Skill Profile Orchestration: Users can define their current skill sets and set target occupations.
 - Gap Analysis and Course Recommendation: The platform compares the user's profile with the requirements of a target occupation, identifies skill gaps, and recommends specific educational courses to bridge those deficiencies.
 - Personalized Career Guidance: Based on the user's existing competencies, the platform provides recommendations for alternative occupations that match the user's skills.
+
+## Components
+
+- https://github.com/skillab-project/skillab-ui
+- https://github.com/skillab-project/user-management
+- https://github.com/skillab-project/Diversity-analysis
+- https://github.com/skillab-project/llm-skill-extraction
+- https://github.com/skillab-project/hierarchical-cumulative-voting
+- https://github.com/skillab-project/curriculum-skills
+- https://github.com/skillab-project/skill-ageing
+- https://github.com/skillab-project/giant_component_networks
+- https://github.com/skillab-project/occupational-demand-forecaster

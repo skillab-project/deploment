@@ -1,7 +1,7 @@
 services:
   # -- UI --
   ui:
-    image: skillabproject/ui:0.1.148
+    image: skillabproject/ui:0.1.162
     container_name: ui
     environment:
       - REACT_APP_API_URL_TRACKER_USERNAME=event_public
@@ -23,7 +23,7 @@ services:
 
   # -- User management --
   user-management-backend:
-    image: skillabproject/user-management:0.1.89
+    image: skillabproject/user-management:0.1.104
     container_name: user-management-backend
     depends_on:
       - user-management-db
@@ -42,6 +42,7 @@ services:
       - TRACKER_API_URL=https://skillab-tracker.csd.auth.gr
       - TRACKER_API_USERNAME=event_public
       - TRACKER_API_PASSWORD=PublicOnly2026
+      - CVEXTRACTOR_API_URL=http://llm-skill-extraction-app:8000
     restart: unless-stopped
     ports:
       - '8081:8080'
@@ -60,7 +61,7 @@ services:
 
   # -- diversity-analysis --
   diversity-analysis:
-    image: skillabproject/diversity-analysis:0.1.41
+    image: skillabproject/diversity-analysis:0.1.54
     container_name: diversity-analysis
     environment:
       - URL=https://skillab-tracker.csd.auth.gr/api
@@ -95,7 +96,7 @@ services:
       mysql-curriculum-skill:
         condition: service_healthy
     container_name: curriculum-skills
-    image: skillabproject/curriculum-skills:0.1.134
+    image: skillabproject/curriculum-skills:0.1.151
     ports:
       - "5002:8000"
     volumes:
@@ -140,7 +141,7 @@ services:
 
   # -- skill-ageing --
   skill-ageing:
-    image: skillabproject/skill-ageing:0.1.40
+    image: skillabproject/skill-ageing:0.1.42
     container_name: skill-ageing
     environment:
       - TRACKER_API=https://skillab-tracker.csd.auth.gr/api
@@ -156,7 +157,7 @@ services:
 
   # -- giant-component-networks --
   giant-component-networks:
-    image: skillabproject/giant-component-networks:0.1.24
+    image: skillabproject/giant-component-networks:0.1.26
     container_name: giant-component-networks
     environment:
       - TRACKER_API=https://skillab-tracker.csd.auth.gr/api
@@ -180,6 +181,62 @@ services:
       - "8877:8877"
     restart: unless-stopped
 
+  
+  #llm skill extractor
+  llm-skill-extraction-app:
+    container_name: llm-skill-extraction-app
+    image: skillabproject/llm-skill-extraction-app:0.1.14
+    ports:
+      - "7538:8000"
+    environment:
+      - NORMALIZER_URL=http://llm-skill-extraction-esco-api:8001/normalize
+      - API_URL=http://ollama:11434/v1
+      - MODEL_NAME=mistral
+    depends_on:
+      llm-skill-extraction-esco-api:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+  
+  llm-skill-extraction-esco-api:
+    container_name: llm-skill-extraction-esco-api
+    image: skillabproject/llm-skill-extraction-esco-api:0.1.14
+    ports:
+      - "7539:8001"
+
+  ollama:
+    container_name: ollama
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        pid=$$!
+        echo "Waiting for Ollama server to come up..."
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        echo "Pulling mistral model (first run only, may take a while)..."
+        ollama pull mistral
+        wait $$pid
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q mistral || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    # --- GPU acceleration (requires NVIDIA driver + NVIDIA Container Toolkit on the host) ---
+    # uncomment the following lines if you want to enable GPU acceleration for Ollama
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
 
 volumes:
   user_management_postgresql_data:
@@ -192,3 +249,4 @@ volumes:
   skill-gap-longterm:
   skill-ageing_analyses:
   giant-component-networks_analyses:
+  ollama-data:
